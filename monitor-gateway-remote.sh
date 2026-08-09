@@ -50,14 +50,23 @@ send_bark() {
     local title="$1"
     local body="$2"
     if [[ "$USE_BARK" != "true" ]]; then
+        log "⚠️ send_bark 跳过: USE_BARK 不为 true（当前值: ${USE_BARK}）"
         return 0
     fi
     if [[ -z "$BARK_BASE" || -z "$BARK_KEY" ]]; then
+        log "⚠️ send_bark 跳过: BARK 配置缺失（BASE='${BARK_BASE}' KEY='${BARK_KEY}'）"
         return 0
     fi
     local url
     url=$(build_bark_url "$title" "$body")
-    curl -s --max-time 5 "$url" >/dev/null 2>&1
+    log "📤 推送 Bark: $url"
+    local http_code
+    http_code=$(curl -s --max-time 10 -w '%{http_code}' -o /tmp/bark_response.txt "$url" 2>&1)
+    log "📥 Bark 响应: HTTP ${http_code:-失败}"
+    if [[ -f /tmp/bark_response.txt ]] && [[ -s /tmp/bark_response.txt ]]; then
+        log "📄 Bark 响应内容: $(head -c 200 /tmp/bark_response.txt)"
+    fi
+    rm -f /tmp/bark_response.txt
 }
 
 # 状态标志：
