@@ -26,15 +26,29 @@ GATEWAY_PROCESS="openclaw"
 BARK_TITLE="OpenClaw Gateway 已启动"
 BARK_BODY="OpenClaw%20%20Gateway%20%20已启动！"
 
+# Bark URL 编码函数
+url_encode() {
+    local string="$1"
+    # 用 python 做 URL 编码（bash 原生不支持中文 encode）
+    python3 -c "
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=''))
+" "$string" 2>/dev/null || echo "$string"
+}
+
 # Bark URL 构建函数
 build_bark_url() {
     local title="$1"
     local body="$2"
+    local enc_title enc_body enc_group enc_icon
+    enc_title=$(url_encode "$title")
+    enc_body=$(url_encode "$body")
     local url="${BARK_BASE}/${BARK_KEY}"
     if [[ -n "$BARK_GROUP" ]]; then
-        url="${url}/${BARK_GROUP}"
+        enc_group=$(url_encode "$BARK_GROUP")
+        url="${url}/${enc_group}"
     fi
-    url="${url}/${title}/${body}"
+    url="${url}/${enc_title}/${enc_body}"
     if [[ -n "$BARK_ICON" ]]; then
         url="${url}?icon=${BARK_ICON}"
     fi
