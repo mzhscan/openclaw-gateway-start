@@ -246,10 +246,12 @@ fi
 
 SCRIPT_PATH="$INSTALL_DIR/$SCRIPT_NAME"
 
-if curl -fsSL "$REPO_BASE/$SCRIPT_NAME" -o "$SCRIPT_PATH"; then
+if curl -fsSL "$REPO_BASE/$SCRIPT_NAME" -o "$SCRIPT_PATH.tmp"; then
+    $SUDO mv "$SCRIPT_PATH.tmp" "$SCRIPT_PATH"
     $SUDO chmod +x "$SCRIPT_PATH"
     echo -e "${GREEN}✅ 脚本已下载到 $SCRIPT_PATH${NC}"
 else
+    rm -f "$SCRIPT_PATH.tmp"
     echo -e "${RED}❌ 下载失败，请检查网络${NC}"
     exit 1
 fi
