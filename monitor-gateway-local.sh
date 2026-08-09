@@ -8,12 +8,14 @@
 # 加载配置
 CONF_FILE="/opt/scripts/monitor-gateway-local.conf"
 if [[ -f "$CONF_FILE" ]]; then
+    # shellcheck disable=SC1090
     source "$CONF_FILE"
 fi
 
 # 默认值
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
-PROCESS_NAME="openclaw.*gateway"
+# 用更精确的匹配，避免匹到本脚本
+GATEWAY_PROCESS_PATTERN="openclaw-gateway|openclaw.*gateway.*--daemon|gateway.*--port"
 
 # Bark URL 构建函数
 build_bark_url() {
@@ -41,10 +43,10 @@ send_bark() {
     fi
     local url
     url=$(build_bark_url "$title" "$body")
-    curl -s "$url" >/dev/null 2>&1
+    curl -s --max-time 5 "$url" >/dev/null 2>&1
 }
 
-# ALERT 标志位：0=正常 1=已告警
+# ALERT 标志位：0=正常 1=已告警（Gateway 停止）
 ALERT=0
 
 mkdir -p /var/log/monitor
@@ -54,37 +56,77 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
 }
 
+# 检测 Gateway 进程是否在跑
+# 排除本脚本自己：用 ps + grep -v 排除包含本脚本路径的进程
+is_gateway_running() {
+    # 用 ps 列出所有进程，过滤掉 grep 和本脚本
+    local count
+    count=$(ps -eo pid,cmd --no-headers 2>/dev/null \
+        | grep -E "openclaw.*gateway|gateway.*openclaw" \
+        | grep -v "monitor-gateway-local" \
+        | grep -v "grep -E" \
+        | wc -l)
+    [[ $count -gt 0 ]]
+}
+
+# 启动 Gateway（多种方式尝试）
+start_gateway() {
+    if ! command -v openclaw >/dev/null 2>&1; then
+        log "❌ 未找到 openclaw 命令"
+        return 1
+    fi
+
+    # 方式 1：用官方 start 命令
+    if openclaw gateway start >/dev/null 2>&1; then
+        sleep 2
+        if is_gateway_running; then
+            return 0
+        fi
+    fi
+
+    # 方式 2：直接运行 gateway（前台方式）
+    if openclaw gateway >/dev/null 2>&1 & then
+        sleep 3
+        if is_gateway_running; then
+            return 0
+        fi
+    fi
+
+    # 方式 3：用 nohup 后台启动
+    if nohup openclaw gateway >/var/log/openclaw-gateway.log 2>&1 & then
+        sleep 3
+        if is_gateway_running; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 本机 Gateway 监控已启动" >> "$LOG"
 
 # 启动时检测一次
-if pgrep -f "$PROCESS_NAME" >/dev/null 2>&1; then
+if is_gateway_running; then
     log "启动检测：Gateway 已在运行"
     send_bark "${BARK_TITLE}" "${BARK_BODY}"
     log "已推送启动通知"
     ALERT=0
 else
     log "启动检测：Gateway 未运行，尝试拉起"
-    if command -v openclaw >/dev/null 2>&1; then
-        openclaw gateway start >/dev/null 2>&1
-        sleep 3
-        if pgrep -f "$PROCESS_NAME" >/dev/null 2>&1; then
-            log "启动检测：Gateway 已成功拉起"
-            send_bark "${BARK_TITLE}" "${BARK_BODY}"
-            log "已推送启动通知"
-            ALERT=0
-        else
-            log "启动检测：拉起失败，等待下次循环"
-            ALERT=1
-        fi
+    if start_gateway; then
+        log "启动检测：Gateway 已成功拉起"
+        send_bark "${BARK_TITLE}" "${BARK_BODY}"
+        log "已推送启动通知"
+        ALERT=0
     else
-        log "启动检测：未找到 openclaw 命令，跳过拉起"
+        log "启动检测：拉起失败，等待下次循环"
         ALERT=1
     fi
 fi
 
 # 主循环
 while true; do
-    if pgrep -f "$PROCESS_NAME" >/dev/null 2>&1; then
+    if is_gateway_running; then
         if [[ $ALERT -eq 1 ]]; then
             # 死 → 活，推一次
             log "Gateway 已恢复"
@@ -98,14 +140,12 @@ while true; do
             ALERT=1
         fi
         # 尝试拉起
-        if command -v openclaw >/dev/null 2>&1; then
-            openclaw gateway start >/dev/null 2>&1
-            sleep 3
-            if pgrep -f "$PROCESS_NAME" >/dev/null 2>&1; then
-                log "Gateway 拉起成功"
-                send_bark "${BARK_TITLE}" "${BARK_BODY}"
-                ALERT=0
-            fi
+        if start_gateway; then
+            log "Gateway 拉起成功"
+            send_bark "${BARK_TITLE}" "${BARK_BODY}"
+            ALERT=0
+        else
+            log "Gateway 拉起失败，下次循环重试"
         fi
     fi
     sleep "$CHECK_INTERVAL"
