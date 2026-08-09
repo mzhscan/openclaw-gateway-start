@@ -40,6 +40,42 @@ echo ""
 echo -e "${GREEN}✅ 已选择：$([[ $SCRIPT_TYPE == local ]] && echo '本机监控' || echo '远程监控')${NC}"
 echo ""
 
+# ============== 默认推送文案 ==============
+# 脚本1：本机监控 - 启动/拉起成功时推
+DEFAULT_LOCAL_TITLE="OpenClaw Gateway 已启动"
+DEFAULT_LOCAL_BODY="OpenClaw%20%20Gateway%20%20已启动！"
+
+# 脚本2：远程监控 - 两种情况
+# SSH 连不上
+DEFAULT_SSH_FAIL_TITLE="无法连接到 OpenClaw 所在服务器"
+DEFAULT_SSH_FAIL_BODY="无法连接到 OpenClaw 所在服务器！"
+# SSH 连上但 gateway 死了
+DEFAULT_GW_DEAD_TITLE="OpenClaw Gateway 已停止"
+DEFAULT_GW_DEAD_BODY="OpenClaw%20%20Gateway%20%20已停止！"
+
+if [[ "$SCRIPT_TYPE" == "local" ]]; then
+    echo -e "${YELLOW}📢 推送文案（本机监控）${NC}"
+    echo "----------------------------------------"
+    echo "  标题: ${DEFAULT_LOCAL_TITLE}"
+    echo "  内容: ${DEFAULT_LOCAL_BODY}"
+    echo "  (脚本内置固定文案，无需用户配置)"
+    echo "----------------------------------------"
+else
+    echo -e "${YELLOW}📢 推送文案（远程监控，两种情况区分）${NC}"
+    echo "----------------------------------------"
+    echo "  情况1 - SSH 连不上:"
+    echo "    标题: ${DEFAULT_SSH_FAIL_TITLE}"
+    echo "    内容: ${DEFAULT_SSH_FAIL_BODY}"
+    echo ""
+    echo "  情况2 - SSH 连上但 gateway 死了:"
+    echo "    标题: ${DEFAULT_GW_DEAD_TITLE}"
+    echo "    内容: ${DEFAULT_GW_DEAD_BODY}"
+    echo ""
+    echo "  (脚本内置固定文案，无需用户配置)"
+    echo "----------------------------------------"
+fi
+echo ""
+
 # ============== 是否配置 Bark 推送 ==============
 read -p "是否配置 Bark 推送通知？[y/N]: " USE_BARK
 
@@ -93,26 +129,6 @@ if [[ "$USE_BARK" =~ ^[Yy]$ ]]; then
         done
     fi
 
-    # 标题（必填）
-    while true; do
-        read -p "请输入推送标题: " BARK_TITLE
-        if [[ -z "$BARK_TITLE" ]]; then
-            echo -e "${RED}❌ 标题不能为空${NC}"
-            continue
-        fi
-        break
-    done
-
-    # 通知内容（必填）
-    while true; do
-        read -p "请输入通知内容: " BARK_BODY
-        if [[ -z "$BARK_BODY" ]]; then
-            echo -e "${RED}❌ 通知内容不能为空${NC}"
-            continue
-        fi
-        break
-    done
-
     # 图标（可选）
     read -p "是否设置自定义推送图标？[y/N]: " USE_ICON
     if [[ "$USE_ICON" =~ ^[Yy]$ ]]; then
@@ -136,8 +152,6 @@ if [[ "$USE_BARK" =~ ^[Yy]$ ]]; then
     echo "Bark 地址: $BARK_BASE"
     echo "设备 Key: $BARK_KEY"
     [[ -n "$BARK_GROUP" ]] && echo "分组: $BARK_GROUP"
-    echo "标题: $BARK_TITLE"
-    echo "内容: $BARK_BODY"
     [[ -n "$BARK_ICON" ]] && echo "图标: $BARK_ICON"
     echo "----------------------------------------"
     echo ""
@@ -275,8 +289,6 @@ USE_BARK=$USE_BARK_FLAG
 BARK_BASE=$BARK_BASE
 BARK_KEY=$BARK_KEY
 BARK_GROUP=$BARK_GROUP
-BARK_TITLE=$BARK_TITLE
-BARK_BODY=$BARK_BODY
 BARK_ICON=$BARK_ICON
 CHECK_INTERVAL=5
 EOF
@@ -343,3 +355,4 @@ echo "  查看日志:  sudo journalctl -u $SERVICE_NAME -f"
 echo "  重启服务:  sudo systemctl restart $SERVICE_NAME"
 echo "  停止服务:  sudo systemctl stop $SERVICE_NAME"
 echo "  卸载服务:  sudo systemctl disable --now $SERVICE_NAME && sudo rm $SERVICE_PATH"
+echo ""
