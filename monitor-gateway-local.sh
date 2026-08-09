@@ -1,9 +1,11 @@
 #!/bin/bash
 # ============================================================
-# OpenClaw Gateway 本机监控脚本
-# 用途：监控本机 OpenClaw Gateway，死了自动拉起 + Bark 推送
+# OpenClaw Gateway 本机监控脚本（端口检测版）
+# 用途：检测本机 OpenClaw Gateway 端口（默认 15318），
+#       死了就 kill openclaw 进程让 bun 自动重启 + Bark 推送
 # 服务：monitor-gateway-local.service
-# 推送文案（固定，不可配置）：
+#
+# 推送文案（固定）：
 #   标题: OpenClaw Gateway 已启动
 #   内容: OpenClaw%20%20Gateway%20%20已启动！
 # ============================================================
@@ -17,6 +19,8 @@ fi
 
 # 默认值
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
+GATEWAY_PORT="${GATEWAY_PORT:-15318}"
+GATEWAY_PROCESS="openclaw"
 
 # ===== 固定推送文案 =====
 BARK_TITLE="OpenClaw Gateway 已启动"
@@ -51,7 +55,7 @@ send_bark() {
     curl -s --max-time 5 "$url" >/dev/null 2>&1
 }
 
-# ALERT 标志位：0=正常 1=已告警（Gateway 停止）
+# ALERT 标志位：0=正常 1=已告警（Gateway 端口没监听）
 ALERT=0
 
 mkdir -p /var/log/monitor
@@ -61,68 +65,51 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
 }
 
-# 检测 Gateway 进程（用 ps+grep-v 精确匹配）
+# 检测 Gateway 端口是否在监听
 is_gateway_running() {
-    local count
-    count=$(ps -eo pid,cmd --no-headers 2>/dev/null \
-        | grep -E "openclaw.*gateway|gateway.*openclaw" \
-        | grep -v "monitor-gateway-local" \
-        | grep -v "grep -E" \
-        | wc -l)
-    [[ $count -gt 0 ]]
-}
-
-# 启动 Gateway（多种方式尝试）
-start_gateway() {
-    if ! command -v openclaw >/dev/null 2>&1; then
-        log "❌ 未找到 openclaw 命令"
-        return 1
+    # 检查指定端口是否被监听
+    if ss -tln 2>/dev/null | grep -q ":${GATEWAY_PORT} "; then
+        return 0
     fi
-
-    # 方式 1：官方 start 命令
-    if openclaw gateway start >/dev/null 2>&1; then
-        sleep 2
-        if is_gateway_running; then
+    # 也检查一下 netstat（兼容老系统）
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -tln 2>/dev/null | grep -q ":${GATEWAY_PORT} "; then
             return 0
         fi
     fi
-
-    # 方式 2：前台启动
-    if openclaw gateway >/dev/null 2>&1 & then
-        sleep 3
-        if is_gateway_running; then
-            return 0
-        fi
-    fi
-
-    # 方式 3：nohup 后台启动
-    if nohup openclaw gateway >/var/log/openclaw-gateway.log 2>&1 & then
-        sleep 3
-        if is_gateway_running; then
-            return 0
-        fi
-    fi
-
     return 1
 }
 
-log "本机 Gateway 监控已启动"
+# 拉起 Gateway：杀掉 openclaw 进程，让 bun server.js 自动重启它
+start_gateway() {
+    log "尝试拉起：杀掉 ${GATEWAY_PROCESS} 进程，让 bun 自动重启"
+    # 杀掉 openclaw 子进程（PPID 通常是 bun server.js）
+    pkill -f "^${GATEWAY_PROCESS}" 2>/dev/null
+    # 等待并检测
+    sleep 5
+    if is_gateway_running; then
+        log "✅ 拉起成功（端口 ${GATEWAY_PORT} 已恢复）"
+        return 0
+    fi
+    log "❌ 拉起失败（端口 ${GATEWAY_PORT} 未恢复）"
+    return 1
+}
+
+log "本机 Gateway 监控已启动（端口检测模式，端口 ${GATEWAY_PORT}）"
 
 # 启动时检测一次
 if is_gateway_running; then
-    log "启动检测：Gateway 已在运行"
+    log "启动检测：Gateway 端口 ${GATEWAY_PORT} 已在监听"
     send_bark "$BARK_TITLE" "$BARK_BODY"
     log "已推送启动通知"
     ALERT=0
 else
-    log "启动检测：Gateway 未运行，尝试拉起"
+    log "启动检测：Gateway 端口 ${GATEWAY_PORT} 未监听，尝试拉起"
     if start_gateway; then
-        log "启动检测：Gateway 已成功拉起"
         send_bark "$BARK_TITLE" "$BARK_BODY"
         log "已推送启动通知"
         ALERT=0
     else
-        log "启动检测：拉起失败，等待下次循环"
         ALERT=1
     fi
 fi
@@ -132,23 +119,22 @@ while true; do
     if is_gateway_running; then
         if [[ $ALERT -eq 1 ]]; then
             # 死 → 活，推一次
-            log "Gateway 已恢复"
+            log "Gateway 已恢复（端口 ${GATEWAY_PORT} 恢复监听）"
             send_bark "$BARK_TITLE" "$BARK_BODY"
             log "已推送恢复通知"
             ALERT=0
         fi
     else
         if [[ $ALERT -eq 0 ]]; then
-            log "Gateway 已停止，尝试拉起"
+            log "❌ Gateway 已停止（端口 ${GATEWAY_PORT} 不再监听）"
             ALERT=1
         fi
         # 尝试拉起
         if start_gateway; then
-            log "Gateway 拉起成功"
             send_bark "$BARK_TITLE" "$BARK_BODY"
             ALERT=0
         else
-            log "Gateway 拉起失败，下次循环重试"
+            log "拉起失败，下次循环重试"
         fi
     fi
     sleep "$CHECK_INTERVAL"
