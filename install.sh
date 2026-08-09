@@ -222,8 +222,9 @@ fi
 
 # ============== 检查 root 权限 ==============
 if [[ $EUID -ne 0 ]]; then
-    echo -e "${YELLOW}⚠️  需要 root 权限，将使用 sudo${NC}"
-    SUDO="sudo"
+    echo -e "${RED}❌ 请使用 sudo 重新运行本脚本${NC}"
+    echo -e "${YELLOW}   示例: sudo bash <(curl -Ls ...)${NC}"
+    exit 1
 else
     SUDO=""
 fi
