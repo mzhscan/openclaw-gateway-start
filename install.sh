@@ -220,7 +220,7 @@ if [[ "$SCRIPT_TYPE" == "remote" ]]; then
     echo -e "${GREEN}✅ sshpass 已就绪${NC}"
 fi
 
-# ============== 检查 root 权限 ==============
+# ============== 检查 root 权限（v2 - 强制要求sudo） ==============
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}❌ 请使用 sudo 重新运行本脚本${NC}"
     echo -e "${YELLOW}   示例: sudo bash <(curl -Ls ...)${NC}"
