@@ -163,8 +163,9 @@ REMOTE_USER=""
 REMOTE_PASS=""
 REMOTE_PORT=""
 SSH_TIMEOUT=10
+GATEWAY_PORT=15318
 
-if [[ "$SCRIPT_TYPE" == "remote" ]]; then
+if [[ "$SCRIPT_TYPE" == "remote" ]; then
     echo -e "${YELLOW}🖥️  被监控机器配置${NC}"
     echo "----------------------------------------"
 
@@ -206,12 +207,24 @@ if [[ "$SCRIPT_TYPE" == "remote" ]]; then
         break
     done
 
+    while true; do
+        read -p "请输入 OpenClaw Gateway 端口 [默认 15318]: " INPUT_PORT
+        INPUT_PORT="${INPUT_PORT:-15318}"
+        if ! [[ "$INPUT_PORT" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}❌ 端口必须是数字${NC}"
+            continue
+        fi
+        GATEWAY_PORT="$INPUT_PORT"
+        break
+    done
+
     echo ""
     echo -e "${GREEN}✅ 远程配置完成${NC}"
     echo "----------------------------------------"
     echo "目标主机: $REMOTE_HOST"
     echo "用户名: $REMOTE_USER"
-    echo "端口: $REMOTE_PORT"
+    echo "SSH 端口: $REMOTE_PORT"
+    echo "Gateway 端口: $GATEWAY_PORT"
     echo "----------------------------------------"
     echo ""
 
@@ -291,6 +304,7 @@ BARK_KEY=$BARK_KEY
 BARK_GROUP=$BARK_GROUP
 BARK_ICON=$BARK_ICON
 CHECK_INTERVAL=5
+GATEWAY_PORT=${GATEWAY_PORT:-15318}
 EOF
 
 if [[ "$SCRIPT_TYPE" == "remote" ]]; then
@@ -300,6 +314,7 @@ REMOTE_USER=$REMOTE_USER
 REMOTE_PASS=$REMOTE_PASS
 REMOTE_PORT=$REMOTE_PORT
 SSH_TIMEOUT=$SSH_TIMEOUT
+GATEWAY_PORT=$GATEWAY_PORT
 EOF
 fi
 
