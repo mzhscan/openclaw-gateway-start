@@ -2,7 +2,7 @@
 # ============================================================
 # OpenClaw Gateway 监控一键部署脚本
 # 仓库：mzhscan/openclaw-gateway-start
-# 用法：bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
+# 用法：curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh
 # ============================================================
 
 set -e
@@ -220,10 +220,18 @@ if [[ "$SCRIPT_TYPE" == "remote" ]]; then
     echo -e "${GREEN}✅ sshpass 已就绪${NC}"
 fi
 
-# ============== 检查 root 权限（v2 - 强制要求sudo） ==============
+# ============== 检查 root 权限 ==============
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}❌ 请使用 sudo 重新运行本脚本${NC}"
-    echo -e "${YELLOW}   示例: sudo bash <(curl -Ls ...)${NC}"
+    echo ""
+    echo -e "${YELLOW}正确用法（分两步）：${NC}"
+    echo "  curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh"
+    echo "  sudo bash /tmp/install.sh"
+    echo ""
+    echo -e "${YELLOW}一行版：${NC}"
+    echo "  curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh"
+    echo ""
+    echo -e "${RED}⚠️  请勿用 'sudo bash <(curl ...)'，会报 /dev/fd/63 错误${NC}"
     exit 1
 else
     SUDO=""
