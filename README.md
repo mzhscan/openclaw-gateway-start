@@ -14,12 +14,14 @@
 
 ---
 
+> 💡 **提示**：命令已加 `sudo`，无需手动提权。脚本会自动检测权限。
+
 ## 🚀 一键部署
 
 ### 本机监控
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
+sudo bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
 ```
 
 选择 `1`（本机监控），按提示配置 Bark 推送。
@@ -27,7 +29,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start
 ### 远程监控
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
+sudo bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
 ```
 
 选择 `2`（远程监控），按提示填写：
