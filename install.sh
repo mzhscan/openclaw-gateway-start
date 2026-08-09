@@ -165,7 +165,7 @@ REMOTE_PORT=""
 SSH_TIMEOUT=10
 GATEWAY_PORT=15318
 
-if [[ "$SCRIPT_TYPE" == "remote" ]; then
+if [[ "$SCRIPT_TYPE" == "remote" ]]; then
     echo -e "${YELLOW}🖥️  被监控机器配置${NC}"
     echo "----------------------------------------"
 
