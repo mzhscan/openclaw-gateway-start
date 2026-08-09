@@ -3,9 +3,14 @@
 # OpenClaw Gateway 远程监控脚本
 # 用途：部署在监控端，远程检测目标机器的 Gateway 状态
 # 服务：monitor-gateway-remote.service
-# 区分：
-#   - SSH 连不上 → 推"无法连接到 OpenClaw 所在服务器"
-#   - SSH 连上但 gateway 死了 → 推"对方 Gateway 已停止"
+#
+# 推送文案（固定，两种情况严格区分）：
+#   情况1 - SSH 连不上（含密码错、连不上、认证失败）:
+#     标题: 无法连接到 OpenClaw 所在服务器
+#     内容: 无法连接到 OpenClaw 所在服务器！
+#   情况2 - SSH 连上但 gateway 死了:
+#     标题: OpenClaw Gateway 已停止
+#     内容: OpenClaw%20%20Gateway%20%20已停止！
 # ============================================================
 
 # 加载配置
@@ -18,6 +23,14 @@ fi
 # 默认值
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
 SSH_TIMEOUT="${SSH_TIMEOUT:-10}"
+
+# ===== 固定推送文案（两种情况严格区分）=====
+# 情况1：SSH 连不上
+SSH_FAIL_TITLE="无法连接到 OpenClaw 所在服务器"
+SSH_FAIL_BODY="无法连接到 OpenClaw 所在服务器！"
+# 情况2：SSH 连上但 gateway 死了
+GW_DEAD_TITLE="OpenClaw Gateway 已停止"
+GW_DEAD_BODY="OpenClaw%20%20Gateway%20%20已停止！"
 
 # Bark URL 构建函数
 build_bark_url() {
@@ -53,6 +66,7 @@ send_bark() {
 #   1 = 已告警 SSH 连不上
 #   2 = 已告警 Gateway 停止（SSH 通但进程死）
 ALERT=0
+LAST_SSH_ERROR=""
 
 mkdir -p /var/log/monitor
 LOG="/var/log/monitor/gateway-remote.log"
@@ -75,98 +89,92 @@ fi
 log "远程 Gateway 监控已启动"
 
 # 远程检测函数
-# 返回值（通过 stdout）：
+# 返回值（stdout）：
 #   "OK"         = Gateway 在跑
-#   "DEAD"       = Gateway 死了
-#   "SSH_FAIL"   = SSH 连不上（含密码错、连不上、认证失败）
+#   "DEAD"       = Gateway 死了（SSH 通但进程死）
+#   "SSH_FAIL"   = SSH 连不上（含密码错、连不上等）
 check_remote_gateway() {
     local result
     local ssh_exit
     local sshpass_exit
-
-    # 先捕获 stdout 和 stderr
     local tmp_err
     tmp_err=$(mktemp)
-    trap 'rm -f "$tmp_err"' RETURN
 
+    # 在远程机器执行 ps 检测 gateway
     result=$(sshpass -p "$REMOTE_PASS" ssh \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
         -o ConnectTimeout="$SSH_TIMEOUT" \
-        -o BatchMode=no \
         -p "$REMOTE_PORT" \
         "${REMOTE_USER}@${REMOTE_HOST}" \
         "ps -eo cmd --no-headers 2>/dev/null | grep -E 'openclaw.*gateway|gateway.*openclaw' | grep -v grep | head -1" 2>"$tmp_err")
     ssh_exit=$?
     sshpass_exit=$?
 
-    # 详细诊断：捕获 stderr
+    # 捕获错误信息
     local err_msg=""
     if [[ -s "$tmp_err" ]]; then
         err_msg=$(head -1 "$tmp_err")
     fi
+    rm -f "$tmp_err"
 
-    # SSH 完全没连上（sshpass 退出码非 0 或 ssh 退出码非 0 且无 stdout）
-    # sshpass 退出码：1=参数错，3=密码错，4=主机错，5=密钥问题，6=ssh 没找到
-    # ssh 退出码：255=网络问题
+    # ===== 关键判断逻辑 =====
+    # 如果 sshpass 或 ssh 退出码非 0，且 stdout 为空 → SSH 连不上
     if [[ $sshpass_exit -ne 0 ]] || [[ $ssh_exit -ne 0 ]]; then
-        # 没拿到任何 stdout，肯定是连接问题
         if [[ -z "$result" ]]; then
-            echo "SSH_FAIL"
-            # 把错误信息也返回（用全局变量）
             LAST_SSH_ERROR="$err_msg"
-            return 1
+            echo "SSH_FAIL"
+            return 0
         fi
-        # 有 stdout 但 ssh_exit 非 0，可能是远程命令执行失败（比如 grep 没匹到）
-        # 这种情况下要继续判断 result 是否为空
+        # 有 stdout 但 ssh_exit 非 0：可能是远程命令执行失败（如 grep 无匹到）
+        # 继续往下判断
     fi
 
-    # SSH 连上了，根据 result 内容判断
+    # SSH 连上了，根据 result 内容判断 Gateway 状态
     if [[ -z "$result" ]]; then
         echo "DEAD"
-        return 0
     else
         echo "OK"
-        return 0
     fi
+    return 0
 }
-
-# 初始化全局变量
-LAST_SSH_ERROR=""
 
 log "远程 Gateway 监控已就绪"
 
 # 主循环
 while true; do
     RESULT=$(check_remote_gateway)
-    CHECK_EXIT=$?
 
-    if [[ "$RESULT" == "SSH_FAIL" ]]; then
-        # SSH 连不上
-        if [[ $ALERT -ne 1 ]]; then
-            log "SSH 连不上: $LAST_SSH_ERROR"
-            send_bark "无法连接到 OpenClaw 所在服务器" "无法 SSH 到 ${REMOTE_HOST}:${REMOTE_PORT}"
-            log "已推送'SSH连接失败'通知"
-            ALERT=1
-        fi
-    elif [[ "$RESULT" == "DEAD" ]]; then
-        # SSH 连上但 gateway 死了
-        if [[ $ALERT -ne 2 ]]; then
-            log "Gateway 已停止（SSH 通但进程死）"
-            send_bark "OpenClaw Gateway 已停止" "${REMOTE_HOST} 上的 Gateway 已停止运行"
-            log "已推送'Gateway已停止'通知"
-            ALERT=2
-        fi
-    elif [[ "$RESULT" == "OK" ]]; then
-        # 正常
-        if [[ $ALERT -ne 0 ]]; then
-            log "Gateway 已恢复正常（恢复不推送）"
-        fi
-        ALERT=0
-    else
-        # 未知状态
-        log "⚠️ 未知检测结果: $RESULT"
-    fi
+    case "$RESULT" in
+        SSH_FAIL)
+            # ===== 情况1：SSH 连不上 =====
+            if [[ $ALERT -ne 1 ]]; then
+                log "❌ SSH 连不上: ${LAST_SSH_ERROR}"
+                send_bark "$SSH_FAIL_TITLE" "$SSH_FAIL_BODY"
+                log "📤 已推送[SSH连接失败]通知: ${SSH_FAIL_TITLE}"
+                ALERT=1
+            fi
+            ;;
+        DEAD)
+            # ===== 情况2：SSH 通但 gateway 死了 =====
+            if [[ $ALERT -ne 2 ]]; then
+                log "❌ Gateway 已停止（SSH 通但进程死）"
+                send_bark "$GW_DEAD_TITLE" "$GW_DEAD_BODY"
+                log "📤 已推送[Gateway已停止]通知: ${GW_DEAD_TITLE}"
+                ALERT=2
+            fi
+            ;;
+        OK)
+            # 正常状态
+            if [[ $ALERT -ne 0 ]]; then
+                log "✅ Gateway 已恢复正常（恢复不推送）"
+            fi
+            ALERT=0
+            ;;
+        *)
+            log "⚠️ 未知检测结果: $RESULT"
+            ;;
+    esac
 
     sleep "$CHECK_INTERVAL"
 done
