@@ -138,14 +138,16 @@ https://bark.doogeee.cn:3210/skVvGbREvs6VL9RRyYi24L/星黎好消息/OpenClaw%20G
 
 ## 📊 推送规则
 
+推送文案是**脚本内置固定值**，部署时无需用户配置。安装脚本会在终端告知用户默认文案。
+
 ### 本机监控（monitor-gateway-local）
 
 | 场景 | 推送标题 | 推送内容 |
 |------|---------|---------|
-| 开机检测到 Gateway 在跑 | 用户自定义 | 用户自定义 |
-| Gateway 死 → 自动拉起成功 | 用户自定义 | 用户自定义 |
+| 启动检测到 Gateway 在跑 | `OpenClaw Gateway 已启动` | `OpenClaw%20%20Gateway%20%20已启动！` |
+| Gateway 死 → 自动拉起成功 | `OpenClaw Gateway 已启动` | `OpenClaw%20%20Gateway%20%20已启动！` |
 | Gateway 死 → 拉起失败 | **不推送**（重试）| - |
-| 恢复正常 | 用户自定义 | 用户自定义 |
+| 恢复正常 | `OpenClaw Gateway 已启动` | `OpenClaw%20%20Gateway%20%20已启动！` |
 
 **去重**：用 `ALERT` 标志位，同一异常只推一次，恢复后再推一次。
 
@@ -153,14 +155,15 @@ https://bark.doogeee.cn:3210/skVvGbREvs6VL9RRyYi24L/星黎好消息/OpenClaw%20G
 
 | 场景 | 推送标题 | 推送内容 | ALERT |
 |------|---------|---------|-------|
-| SSH 连不上（含密码错、网络问题、主机不存在） | `无法连接到 OpenClaw 所在服务器` | `无法 SSH 到 {IP}:{端口}` | 1 |
-| SSH 连上但 Gateway 死了 | `OpenClaw Gateway 已停止` | `{IP} 上的 Gateway 已停止运行` | 2 |
+| **SSH 连不上**（密码错、网络问题、主机不存在） | `无法连接到 OpenClaw 所在服务器` | `无法连接到 OpenClaw 所在服务器！` | 1 |
+| **SSH 连上但 Gateway 死了** | `OpenClaw Gateway 已停止` | `OpenClaw%20%20Gateway%20%20已停止！` | 2 |
 | SSH 连上，Gateway 在跑 | **不推送**（恢复不推送）| - | 0 |
 
 **核心逻辑**：
 - SSH 连不上和 Gateway 死是**两种独立状态**，ALERT 分别用 1 和 2 区分
 - 从 SSH_FAIL → DEAD 也会触发一次 Gateway 已停止通知
 - 从 DEAD → OK 不推送（保持安静）
+- 两种状态的推送文案**完全不同**，可以一眼区分
 
 ---
 
