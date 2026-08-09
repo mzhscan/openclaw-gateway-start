@@ -14,22 +14,35 @@
 
 ---
 
-> 💡 **提示**：命令已加 `sudo`，无需手动提权。脚本会自动检测权限。
+> ⚠️ **重要**：请勿使用 `sudo bash <(curl ...)`，这是 `sudo` + 进程替换的经典坑，会报 `/dev/fd/63: No such file or directory`。请先下载到本地再 sudo 执行。
 
 ## 🚀 一键部署
 
 ### 本机监控
 
+由于 `sudo` + 进程替换 (`bash <(...)`) 存在兼容性问题，请分两步执行：
+
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
+# 第一步：下载脚本到本地
+curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh
+
+# 第二步：sudo 执行
+sudo bash /tmp/install.sh
+```
+
+或者一行版（自动跳转）：
+```bash
+curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh
 ```
 
 选择 `1`（本机监控），按提示配置 Bark 推送。
 
 ### 远程监控
 
+同样分两步：
+
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh)
+curl -Ls https://raw.githubusercontent.com/mzhscan/openclaw-gateway-start/main/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh
 ```
 
 选择 `2`（远程监控），按提示填写：
