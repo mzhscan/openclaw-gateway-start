@@ -3,6 +3,9 @@
 # OpenClaw Gateway 本机监控脚本
 # 用途：监控本机 OpenClaw Gateway，死了自动拉起 + Bark 推送
 # 服务：monitor-gateway-local.service
+# 推送文案（固定，不可配置）：
+#   标题: OpenClaw Gateway 已启动
+#   内容: OpenClaw%20%20Gateway%20%20已启动！
 # ============================================================
 
 # 加载配置
@@ -14,8 +17,10 @@ fi
 
 # 默认值
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
-# 用更精确的匹配，避免匹到本脚本
-GATEWAY_PROCESS_PATTERN="openclaw-gateway|openclaw.*gateway.*--daemon|gateway.*--port"
+
+# ===== 固定推送文案 =====
+BARK_TITLE="OpenClaw Gateway 已启动"
+BARK_BODY="OpenClaw%20%20Gateway%20%20已启动！"
 
 # Bark URL 构建函数
 build_bark_url() {
@@ -56,10 +61,8 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
 }
 
-# 检测 Gateway 进程是否在跑
-# 排除本脚本自己：用 ps + grep -v 排除包含本脚本路径的进程
+# 检测 Gateway 进程（用 ps+grep-v 精确匹配）
 is_gateway_running() {
-    # 用 ps 列出所有进程，过滤掉 grep 和本脚本
     local count
     count=$(ps -eo pid,cmd --no-headers 2>/dev/null \
         | grep -E "openclaw.*gateway|gateway.*openclaw" \
@@ -76,7 +79,7 @@ start_gateway() {
         return 1
     fi
 
-    # 方式 1：用官方 start 命令
+    # 方式 1：官方 start 命令
     if openclaw gateway start >/dev/null 2>&1; then
         sleep 2
         if is_gateway_running; then
@@ -84,7 +87,7 @@ start_gateway() {
         fi
     fi
 
-    # 方式 2：直接运行 gateway（前台方式）
+    # 方式 2：前台启动
     if openclaw gateway >/dev/null 2>&1 & then
         sleep 3
         if is_gateway_running; then
@@ -92,7 +95,7 @@ start_gateway() {
         fi
     fi
 
-    # 方式 3：用 nohup 后台启动
+    # 方式 3：nohup 后台启动
     if nohup openclaw gateway >/var/log/openclaw-gateway.log 2>&1 & then
         sleep 3
         if is_gateway_running; then
@@ -103,19 +106,19 @@ start_gateway() {
     return 1
 }
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 本机 Gateway 监控已启动" >> "$LOG"
+log "本机 Gateway 监控已启动"
 
 # 启动时检测一次
 if is_gateway_running; then
     log "启动检测：Gateway 已在运行"
-    send_bark "${BARK_TITLE}" "${BARK_BODY}"
+    send_bark "$BARK_TITLE" "$BARK_BODY"
     log "已推送启动通知"
     ALERT=0
 else
     log "启动检测：Gateway 未运行，尝试拉起"
     if start_gateway; then
         log "启动检测：Gateway 已成功拉起"
-        send_bark "${BARK_TITLE}" "${BARK_BODY}"
+        send_bark "$BARK_TITLE" "$BARK_BODY"
         log "已推送启动通知"
         ALERT=0
     else
@@ -130,7 +133,7 @@ while true; do
         if [[ $ALERT -eq 1 ]]; then
             # 死 → 活，推一次
             log "Gateway 已恢复"
-            send_bark "${BARK_TITLE}" "${BARK_BODY}"
+            send_bark "$BARK_TITLE" "$BARK_BODY"
             log "已推送恢复通知"
             ALERT=0
         fi
@@ -142,7 +145,7 @@ while true; do
         # 尝试拉起
         if start_gateway; then
             log "Gateway 拉起成功"
-            send_bark "${BARK_TITLE}" "${BARK_BODY}"
+            send_bark "$BARK_TITLE" "$BARK_BODY"
             ALERT=0
         else
             log "Gateway 拉起失败，下次循环重试"
